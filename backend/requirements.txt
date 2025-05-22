@@ -1,0 +1,23 @@
+# ARIES 后端依赖
+fastapi>=0.95.0
+uvicorn>=0.22.0
+python-dotenv>=1.0.0
+python-jose>=3.3.0
+passlib>=1.7.4
+pydantic>=2.0.0
+requests>=2.28.0
+beautiful-soup4>=4.12.0
+faiss-cpu>=1.7.4
+langchain>=0.0.267
+openai>=0.27.0
+paramiko>=3.1.0
+telnetlib3>=1.0.4
+pynetbox>=7.0.0
+kubernetes>=26.1.0
+networkx>=3.1
+prompt-toolkit>=3.0.38
+webhook-listener>=1.0.2
+python-multipart>=0.0.6
+sentence-transformers>=2.2.2
+pyYAML>=6.0
+schedule>=1.2.0
