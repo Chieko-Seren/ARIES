@@ -13,11 +13,20 @@ from pydantic import BaseSettings, Field
 from dotenv import load_dotenv
 import logging
 from core.vault.manager import VaultManager
+import asyncio
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
 # 加载环境变量
 load_dotenv()
+
+def async_init(func):
+    """异步初始化装饰器"""
+    @wraps(func)
+    async def wrapper(self, *args, **kwargs):
+        return await func(self, *args, **kwargs)
+    return wrapper
 
 class Settings(BaseSettings):
     """ARIES系统配置类"""
@@ -81,7 +90,8 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._init_directories()
-        self._init_vault()
+        # 同步初始化Vault
+        asyncio.run(self._init_vault())
         self._load_llm_config()
     
     def _init_directories(self):
@@ -92,7 +102,8 @@ class Settings(BaseSettings):
         os.makedirs(os.path.dirname(self.kg_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.servers_config_path), exist_ok=True)
     
-    def _init_vault(self):
+    @async_init
+    async def _init_vault(self):
         """初始化Vault并加载敏感配置"""
         try:
             vault = VaultManager(
@@ -103,10 +114,10 @@ class Settings(BaseSettings):
             
             # 加载敏感配置
             secrets = {
-                "api": vault.get_secret("api"),
-                "database": vault.get_secret("database"),
-                "llm": vault.get_secret("llm"),
-                "mqtt": vault.get_secret("mqtt")
+                "api": await vault.get_secret("api"),
+                "database": await vault.get_secret("database"),
+                "llm": await vault.get_secret("llm"),
+                "mqtt": await vault.get_secret("mqtt")
             }
             
             # 更新配置

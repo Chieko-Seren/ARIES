@@ -146,6 +146,9 @@ def monitoring_task():
 
 # 启动定时任务
 def start_scheduler():
+    """启动定时任务调度器"""
+    schedule.every(1).minutes.do(monitoring_task)
+    
     while not stop_scheduler.is_set():
         try:
             schedule.run_pending()
