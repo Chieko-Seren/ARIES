@@ -52,3 +52,6 @@ paho-mqtt==1.6.1
 asyncio-mqtt==0.16.1
 # 时序数据库支持
 timescale-db==0.1.0
+
+# Vault 依赖
+hvac>=1.1.1  # Vault客户端
