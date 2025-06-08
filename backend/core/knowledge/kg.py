@@ -11,46 +11,62 @@ import json
 import logging
 import networkx as nx
 from typing import Dict, List, Any, Optional
+from ..database.db import Database
 
 class KnowledgeGraph:
     """知识图谱类，用于构建和查询运维知识"""
     
-    def __init__(self, kg_path: str):
+    def __init__(self, db: Database):
         """初始化知识图谱
         
         Args:
-            kg_path: 知识图谱存储路径
+            db: 数据库实例
         """
-        self.kg_path = kg_path
-        self.graph = nx.DiGraph()
+        self.db = db
         self.logger = logging.getLogger("aries_kg")
-        
-        # 确保目录存在
-        os.makedirs(os.path.dirname(kg_path), exist_ok=True)
         
         # 加载知识图谱
         self._load_graph()
     
     def _load_graph(self):
-        """从文件加载知识图谱"""
+        """从数据库加载知识图谱"""
         try:
-            if os.path.exists(self.kg_path):
-                # 从文件加载图谱
-                self.graph = nx.readwrite.json_graph.node_link_graph(
-                    json.load(open(self.kg_path, 'r'))
+            # 创建图实例
+            self.graph = nx.DiGraph()
+            
+            # 加载节点
+            nodes = self.db.execute_query("SELECT * FROM kg_nodes")
+            for node in nodes:
+                # 将JSON字符串转换回列表
+                commands = json.loads(node['commands']) if node['commands'] else []
+                self.graph.add_node(
+                    node['id'],
+                    type=node['type'],
+                    category=node['category'],
+                    description=node['description'],
+                    commands=commands
                 )
-                self.logger.info(f"已加载知识图谱，包含 {len(self.graph.nodes)} 个节点和 {len(self.graph.edges)} 条边")
-            else:
-                # 创建新图谱并添加基础知识
+            
+            # 加载边
+            edges = self.db.execute_query("SELECT * FROM kg_edges")
+            for edge in edges:
+                self.graph.add_edge(
+                    edge['source'],
+                    edge['target'],
+                    weight=edge['weight']
+                )
+            
+            self.logger.info(f"已从数据库加载知识图谱，包含 {len(nodes)} 个节点和 {len(edges)} 条边")
+            
+            # 如果没有数据，创建基础知识
+            if len(nodes) == 0:
                 self._create_base_knowledge()
-                self.save()
-                self.logger.info("已创建新的知识图谱并添加基础知识")
+                
         except Exception as e:
             self.logger.error(f"加载知识图谱失败: {str(e)}")
             # 创建新图谱
             self.graph = nx.DiGraph()
             self._create_base_knowledge()
-            self.save()
     
     def _create_base_knowledge(self):
         """创建基础知识"""
@@ -105,60 +121,73 @@ class KnowledgeGraph:
             }
         ]
         
-        # 添加节点
+        # 添加节点到数据库
+        node_params = []
         for service in services:
-            self.graph.add_node(service["id"], **service)
+            node_params.append((
+                service['id'],
+                service['type'],
+                service['category'],
+                None,
+                None
+            ))
         
         for problem in problems:
-            self.graph.add_node(problem["id"], **problem)
+            node_params.append((
+                problem['id'],
+                problem['type'],
+                problem['category'],
+                None,
+                None
+            ))
         
         for solution in solutions:
-            self.graph.add_node(solution["id"], **solution)
+            node_params.append((
+                solution['id'],
+                solution['type'],
+                None,
+                solution['description'],
+                json.dumps(solution['commands'], ensure_ascii=False)
+            ))
         
-        # 添加关系
+        if node_params:
+            self.db.execute_many("""
+                INSERT OR REPLACE INTO kg_nodes (id, type, category, description, commands)
+                VALUES (?, ?, ?, ?, ?)
+            """, node_params)
+        
+        # 添加边到数据库
         # 服务与问题的关系
         relations = [
-            ("nginx", "high_cpu", {"weight": 0.7}),
-            ("nginx", "service_down", {"weight": 0.9}),
-            ("mysql", "high_memory", {"weight": 0.8}),
-            ("mysql", "disk_full", {"weight": 0.6}),
-            ("redis", "high_memory", {"weight": 0.7}),
-            ("kubernetes", "service_down", {"weight": 0.8}),
-            ("docker", "high_cpu", {"weight": 0.6})
+            ("nginx", "high_cpu", 0.7),
+            ("nginx", "service_down", 0.9),
+            ("mysql", "high_memory", 0.8),
+            ("mysql", "disk_full", 0.6),
+            ("redis", "high_memory", 0.7),
+            ("kubernetes", "service_down", 0.8),
+            ("docker", "high_cpu", 0.6)
         ]
-        
-        for src, dst, attrs in relations:
-            self.graph.add_edge(src, dst, **attrs)
         
         # 问题与解决方案的关系
         problem_solutions = [
-            ("high_cpu", "restart_service", {"weight": 0.6}),
-            ("high_cpu", "check_process", {"weight": 0.8}),
-            ("high_memory", "clear_cache", {"weight": 0.9}),
-            ("disk_full", "clean_logs", {"weight": 0.8}),
-            ("service_down", "restart_service", {"weight": 0.9}),
-            ("service_down", "check_process", {"weight": 0.7})
+            ("high_cpu", "restart_service", 0.6),
+            ("high_cpu", "check_process", 0.8),
+            ("high_memory", "clear_cache", 0.9),
+            ("disk_full", "clean_logs", 0.8),
+            ("service_down", "restart_service", 0.9),
+            ("service_down", "check_process", 0.7)
         ]
         
-        for src, dst, attrs in problem_solutions:
-            self.graph.add_edge(src, dst, **attrs)
-    
-    def save(self):
-        """保存知识图谱到文件"""
-        try:
-            # 确保目录存在
-            os.makedirs(os.path.dirname(self.kg_path), exist_ok=True)
-            
-            # 将图谱转换为JSON并保存
-            data = nx.readwrite.json_graph.node_link_data(self.graph)
-            with open(self.kg_path, 'w') as f:
-                json.dump(data, f, indent=2)
-            
-            self.logger.info(f"知识图谱已保存到 {self.kg_path}")
-            return True
-        except Exception as e:
-            self.logger.error(f"保存知识图谱失败: {str(e)}")
-            return False
+        edge_params = [(src, dst, weight) for src, dst, weight in relations + problem_solutions]
+        
+        if edge_params:
+            self.db.execute_many("""
+                INSERT OR REPLACE INTO kg_edges (source, target, weight)
+                VALUES (?, ?, ?)
+            """, edge_params)
+        
+        # 重新加载图
+        self._load_graph()
     
     def add_node(self, node_id: str, **attributes):
         """添加节点
@@ -167,7 +196,22 @@ class KnowledgeGraph:
             node_id: 节点ID
             **attributes: 节点属性
         """
+        # 添加到图
         self.graph.add_node(node_id, **attributes)
+        
+        # 添加到数据库
+        commands = json.dumps(attributes.get('commands', []), ensure_ascii=False) if attributes.get('commands') else None
+        self.db.execute_update("""
+            INSERT OR REPLACE INTO kg_nodes (id, type, category, description, commands)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            node_id,
+            attributes.get('type', 'unknown'),
+            attributes.get('category'),
+            attributes.get('description'),
+            commands
+        ))
+        
         self.logger.info(f"已添加节点: {node_id}")
     
     def add_edge(self, source: str, target: str, **attributes):
@@ -178,7 +222,19 @@ class KnowledgeGraph:
             target: 目标节点ID
             **attributes: 边属性
         """
+        # 添加到图
         self.graph.add_edge(source, target, **attributes)
+        
+        # 添加到数据库
+        self.db.execute_update("""
+            INSERT OR REPLACE INTO kg_edges (source, target, weight)
+            VALUES (?, ?, ?)
+        """, (
+            source,
+            target,
+            attributes.get('weight', 0.5)
+        ))
+        
         self.logger.info(f"已添加边: {source} -> {target}")
     
     def get_node(self, node_id: str) -> Dict[str, Any]:
@@ -291,12 +347,18 @@ class KnowledgeGraph:
                 # 失败则减少权重
                 new_weight = max(0.1, current_weight - 0.1)
             
+            # 更新图中的边
             self.graph.edges[problem, solution]["weight"] = new_weight
+            
+            # 更新数据库中的边
+            self.db.execute_update("""
+                UPDATE kg_edges
+                SET weight = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE source = ? AND target = ?
+            """, (new_weight, problem, solution))
+            
             self.logger.info(f"已更新边权重: {problem} -> {solution}, 新权重: {new_weight}")
         else:
             # 添加新边
             initial_weight = 0.6 if success else 0.3
             self.add_edge(problem, solution, weight=initial_weight)
-        
-        # 保存更新后的图谱
-        self.save()

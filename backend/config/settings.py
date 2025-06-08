@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     secret_key: str = Field(default="", env="SECRET_KEY")
     access_token_expire_minutes: int = 30
     
+    # 数据库配置
+    db_path: str = Field(default="./data/aries.db", env="DB_PATH")
+    
     # LLM配置
     llm_provider: str = Field(default="openai", env="LLM_PROVIDER")
     llm_api_key: str = Field(default="", env="LLM_API_KEY")
@@ -63,6 +66,7 @@ class Settings(BaseSettings):
     def _init_directories(self):
         """初始化必要的目录"""
         os.makedirs(self.log_dir, exist_ok=True)
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.vector_db_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.kg_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.servers_config_path), exist_ok=True)
@@ -187,3 +191,6 @@ def create_default_llm_config(config_path: str):
         json.dump(default_config, f, indent=2, ensure_ascii=False)
     
     print(f"已创建默认LLM配置文件: {config_path}")
+
+# 创建全局配置实例
+settings = Settings()

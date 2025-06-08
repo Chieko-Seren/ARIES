@@ -11,20 +11,46 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 import requests
+from ..database.db import Database
 
 class RAG:
     """检索增强生成类，用于智能推理"""
     
-    def __init__(self, vector_store, llm_config: Dict[str, Any]):
+    def __init__(self, vector_store, db: Database, llm_config: Dict[str, Any]):
         """初始化RAG
         
         Args:
             vector_store: 向量存储实例
+            db: 数据库实例
             llm_config: LLM配置
         """
         self.vector_store = vector_store
+        self.db = db
         self.llm_config = llm_config
         self.logger = logging.getLogger("aries_rag")
+    
+    def _get_prompt_template(self, prompt_id: str) -> Dict[str, Any]:
+        """获取提示词模板
+        
+        Args:
+            prompt_id: 提示词ID
+            
+        Returns:
+            提示词模板信息
+        """
+        try:
+            result = self.db.execute_query(
+                "SELECT * FROM llm_prompts WHERE id = ?",
+                (prompt_id,)
+            )
+            if result:
+                return dict(result[0])
+            else:
+                self.logger.error(f"未找到提示词模板: {prompt_id}")
+                return None
+        except Exception as e:
+            self.logger.error(f"获取提示词模板失败: {str(e)}")
+            return None
     
     def _call_llm(self, prompt: str, system_message: str = None) -> Dict[str, Any]:
         """调用LLM API
@@ -97,36 +123,23 @@ class RAG:
         query = f"服务器问题: {problem_desc}, 服务器类型: {server_type}"
         relevant_docs = self.vector_store.search(query, limit=5)
         
-        # 构建提示词
-        system_message = """你是一个专业的系统运维专家，负责诊断和修复服务器问题。
-请根据提供的服务器状态信息和问题描述，生成一个修复计划，包括具体的命令。
-你的回答应该是JSON格式，包含以下字段：
-1. diagnosis: 问题诊断
-2. commands: 修复命令列表
-3. explanation: 修复方案解释
-"""
+        # 获取提示词模板
+        prompt_template = self._get_prompt_template("fix_plan")
+        if not prompt_template:
+            raise ValueError("未找到修复计划提示词模板")
         
-        prompt = f"""## 服务器信息
-服务器ID: {context['server'].get('id')}
-服务器类型: {server_type}
-
-## 问题描述
-{problem_desc}
-
-## 详细状态
-{json.dumps(details, indent=2)}
-
-## 历史失败次数
-{context['history']}
-
-## 相关知识
-{' '.join([doc['content'] for doc in relevant_docs])}
-
-请生成一个修复计划，包括具体的命令。
-"""
+        # 构建提示词
+        prompt = prompt_template["prompt_template"].format(
+            server_id=context['server'].get('id'),
+            server_type=server_type,
+            problem_desc=problem_desc,
+            details=json.dumps(details, indent=2),
+            history=context['history'],
+            knowledge=' '.join([doc['content'] for doc in relevant_docs])
+        )
         
         # 调用LLM
-        response = self._call_llm(prompt, system_message)
+        response = self._call_llm(prompt, prompt_template["system_message"])
         
         # 解析响应
         try:
@@ -165,28 +178,23 @@ class RAG:
         query = f"系统类型: {system_type}, 命令: {description}"
         relevant_docs = self.vector_store.search(query, limit=3)
         
-        # 构建提示词
-        system_message = f"""你是一个{system_type}系统专家，精通Shell命令。
-请根据用户的描述，生成一个准确的Shell命令。
-你的回答应该是JSON格式，包含以下字段：
-1. command: 完整的Shell命令
-2. explanation: 命令的解释
-"""
+        # 获取提示词模板
+        prompt_template = self._get_prompt_template("shell_command")
+        if not prompt_template:
+            raise ValueError("未找到Shell命令提示词模板")
         
-        prompt = f"""## 系统类型
-{system_type}
-
-## 命令描述
-{description}
-
-## 相关知识
-{' '.join([doc['content'] for doc in relevant_docs])}
-
-请生成一个准确的Shell命令。
-"""
+        # 构建提示词
+        prompt = prompt_template["prompt_template"].format(
+            system_type=system_type,
+            description=description,
+            knowledge=' '.join([doc['content'] for doc in relevant_docs])
+        )
         
         # 调用LLM
-        response = self._call_llm(prompt, system_message)
+        response = self._call_llm(
+            prompt,
+            prompt_template["system_message"].format(system_type=system_type)
+        )
         
         # 解析响应
         try:
@@ -224,29 +232,25 @@ class RAG:
         query = f"运维任务: {task_description}"
         relevant_docs = self.vector_store.search(query, limit=5)
         
-        # 构建提示词
-        system_message = """你是一个专业的系统运维专家，负责规划和执行运维任务。
-请根据提供的任务描述和可用服务器信息，生成一个任务执行计划，包括目标服务器和具体命令。
-你的回答应该是JSON格式，包含以下字段：
-1. target_servers: 目标服务器ID列表
-2. commands: 执行命令列表
-3. explanation: 任务计划解释
-"""
+        # 获取提示词模板
+        prompt_template = self._get_prompt_template("task_plan")
+        if not prompt_template:
+            raise ValueError("未找到任务计划提示词模板")
         
-        prompt = f"""## 任务描述
-{task_description}
-
-## 可用服务器
-{json.dumps([{"id": s["id"], "name": s.get("name", s["id"]), "ip": s["ip"], "type": s.get("type", "linux")} for s in available_servers], indent=2)}
-
-## 相关知识
-{' '.join([doc['content'] for doc in relevant_docs])}
-
-请生成一个任务执行计划，包括目标服务器和具体命令。
-"""
+        # 构建提示词
+        prompt = prompt_template["prompt_template"].format(
+            task_description=task_description,
+            available_servers=json.dumps([{
+                "id": s["id"],
+                "name": s.get("name", s["id"]),
+                "ip": s["ip"],
+                "type": s.get("type", "linux")
+            } for s in available_servers], indent=2),
+            knowledge=' '.join([doc['content'] for doc in relevant_docs])
+        )
         
         # 调用LLM
-        response = self._call_llm(prompt, system_message)
+        response = self._call_llm(prompt, prompt_template["system_message"])
         
         # 解析响应
         try:
@@ -281,23 +285,30 @@ class RAG:
         query = context["query"]
         data = context["data"]
         
-        # 构建提示词
-        system_message = """你是一个专业的数据分析师，精通系统运维数据分析。
+        # 获取提示词模板
+        prompt_template = self._get_prompt_template("data_analysis")
+        if not prompt_template:
+            # 使用默认提示词
+            system_message = """你是一个专业的数据分析师，精通系统运维数据分析。
 请根据提供的系统数据和查询，进行专业的分析并给出见解。
 你的回答应该是JSON格式，包含以下字段：
 1. analysis: 数据分析结果
 2. insights: 关键见解列表
-3. recommendations: 建议列表
-"""
-        
-        prompt = f"""## 查询
+3. recommendations: 建议列表"""
+            
+            prompt = f"""## 查询
 {query}
 
 ## 系统数据
 {json.dumps(data, indent=2)}
 
-请对数据进行专业分析，并给出见解和建议。
-"""
+请对数据进行专业分析，并给出见解和建议。"""
+        else:
+            system_message = prompt_template["system_message"]
+            prompt = prompt_template["prompt_template"].format(
+                query=query,
+                data=json.dumps(data, indent=2)
+            )
         
         # 调用LLM
         response = self._call_llm(prompt, system_message)
@@ -339,15 +350,17 @@ class RAG:
         query = f"Kubernetes任务: {description}"
         relevant_docs = self.vector_store.search(query, limit=5)
         
-        # 构建提示词
-        system_message = """你是一个Kubernetes专家，精通集群管理和操作。
+        # 获取提示词模板
+        prompt_template = self._get_prompt_template("kube_plan")
+        if not prompt_template:
+            # 使用默认提示词
+            system_message = """你是一个Kubernetes专家，精通集群管理和操作。
 请根据提供的任务描述和当前集群状态，生成一个Kubernetes操作计划。
 你的回答应该是JSON格式，包含以下字段：
 1. operations: 操作列表，每个操作包含type和params
-2. explanation: 操作计划解释
-"""
-        
-        prompt = f"""## 任务描述
+2. explanation: 操作计划解释"""
+            
+            prompt = f"""## 任务描述
 {description}
 
 ## 当前集群状态
@@ -356,8 +369,14 @@ class RAG:
 ## 相关知识
 {' '.join([doc['content'] for doc in relevant_docs])}
 
-请生成一个Kubernetes操作计划。
-"""
+请生成一个Kubernetes操作计划。"""
+        else:
+            system_message = prompt_template["system_message"]
+            prompt = prompt_template["prompt_template"].format(
+                description=description,
+                current_state=json.dumps(current_state, indent=2),
+                knowledge=' '.join([doc['content'] for doc in relevant_docs])
+            )
         
         # 调用LLM
         response = self._call_llm(prompt, system_message)
@@ -398,15 +417,17 @@ class RAG:
         query = f"网络任务: {description}"
         relevant_docs = self.vector_store.search(query, limit=5)
         
-        # 构建提示词
-        system_message = """你是一个网络工程师，精通网络配置和故障排除。
+        # 获取提示词模板
+        prompt_template = self._get_prompt_template("network_plan")
+        if not prompt_template:
+            # 使用默认提示词
+            system_message = """你是一个网络工程师，精通网络配置和故障排除。
 请根据提供的任务描述和网络拓扑，生成一个网络操作计划。
 你的回答应该是JSON格式，包含以下字段：
 1. operations: 操作列表，每个操作包含type和params
-2. explanation: 操作计划解释
-"""
-        
-        prompt = f"""## 任务描述
+2. explanation: 操作计划解释"""
+            
+            prompt = f"""## 任务描述
 {description}
 
 ## 网络拓扑
@@ -415,8 +436,14 @@ class RAG:
 ## 相关知识
 {' '.join([doc['content'] for doc in relevant_docs])}
 
-请生成一个网络操作计划。
-"""
+请生成一个网络操作计划。"""
+        else:
+            system_message = prompt_template["system_message"]
+            prompt = prompt_template["prompt_template"].format(
+                description=description,
+                topology=json.dumps(topology, indent=2),
+                knowledge=' '.join([doc['content'] for doc in relevant_docs])
+            )
         
         # 调用LLM
         response = self._call_llm(prompt, system_message)
