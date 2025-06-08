@@ -104,41 +104,52 @@ class Agent:
             
         Returns:
             连接器实例
+            
+        Raises:
+            RuntimeError: 连接失败时抛出
         """
-        conn_type = server.get("connection_type", "ssh").lower()
+        conn_type = server.get("connection_type", "ssh")
         
-        if conn_type == "ssh":
-            return SSHConnector(
-                host=server["ip"],
-                port=server.get("port", 22),
-                username=server["username"],
-                password=server.get("password"),
-                key_file=server.get("key_file")
-            )
-        elif conn_type == "telnet":
-            return TelnetConnector(
-                host=server["ip"],
-                port=server.get("port", 23),
-                username=server.get("username"),
-                password=server.get("password")
-            )
-        elif conn_type == "shell":
-            return ShellConnector()
-        elif conn_type == "rj45":
-            return RJ45Connector(
-                device_path=server.get("device_path"),
-                baud_rate=server.get("baud_rate", 9600)
-            )
-        elif conn_type == "cisco_serial":
-            return CiscoConnector(
-                host=server.get("ip"), # May not be used directly for serial but good for consistency
-                port=server["port"], # Serial port like /dev/ttyUSB0 or COM1
-                username=server["username"],
-                password=server["password"],
-                device_type=server.get("device_type", "cisco_ios_serial")
-            )
-        else:
-            raise ValueError(f"不支持的连接类型: {conn_type}")
+        try:
+            if conn_type == "ssh":
+                connector = SSHConnector(
+                    host=server["ip"],
+                    port=server.get("port", 22),
+                    username=server["username"],
+                    password=server["password"]
+                )
+            elif conn_type == "rj45":
+                connector = RJ45Connector(
+                    device_path=server["port"],
+                    baud_rate=server.get("baud_rate", 9600),
+                    timeout=server.get("timeout", 5)
+                )
+            elif conn_type == "cisco_serial":
+                connector = CiscoConnector(
+                    host=server.get("ip"),
+                    port=server["port"],
+                    username=server["username"],
+                    password=server["password"],
+                    device_type=server.get("device_type", "cisco_ios_serial")
+                )
+            else:
+                raise ValueError(f"不支持的连接类型: {conn_type}")
+            
+            # 测试连接
+            try:
+                connector.connect()
+                # 执行简单命令测试连接
+                if hasattr(connector, 'execute'):
+                    connector.execute('echo "connection test"')
+                connector.disconnect()
+            except Exception as e:
+                raise RuntimeError(f"连接测试失败: {str(e)}")
+            
+            return connector
+            
+        except Exception as e:
+            self.logger.error(f"创建连接器失败: {str(e)}")
+            raise
     
     def monitor(self):
         """监控所有服务器状态"""
