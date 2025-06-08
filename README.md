@@ -89,7 +89,7 @@ docker-compose up -d
 
 # 或手动安装
 # 克隆仓库
-git clone https://github.com/yourusername/ARIES.git
+git clone https://github.com/Chieko-Seren/ARIES
 cd ARIES
 
 # 安装后端依赖
