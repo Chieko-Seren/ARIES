@@ -26,15 +26,16 @@ class Settings(BaseSettings):
     
     # API配置
     api_prefix: str = "/api"
-    secret_key: str = Field(default="", env="SECRET_KEY")
-    access_token_expire_minutes: int = 30
+    secret_key: str = Field(..., env="SECRET_KEY")  # 必须提供密钥
+    access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     
     # 数据库配置
     db_path: str = Field(default="./data/aries.db", env="DB_PATH")
+    timescale_url: str = Field(..., env="TIMESCALE_URL")  # 必须提供数据库URL
     
     # LLM配置
     llm_provider: str = Field(default="openai", env="LLM_PROVIDER")
-    llm_api_key: str = Field(default="", env="LLM_API_KEY")
+    llm_api_key: str = Field(..., env="LLM_API_KEY")  # 必须提供API密钥
     llm_model: str = Field(default="gpt-4", env="LLM_MODEL")
     llm_config: Dict[str, Any] = {}
     
@@ -54,9 +55,19 @@ class Settings(BaseSettings):
     # 搜索API配置
     search_api_key: str = Field(default="", env="SEARCH_API_KEY")
     
+    # MQTT配置
+    mqtt_broker: str = Field(default="mqtt", env="MQTT_BROKER")
+    mqtt_port: int = Field(default=1883, env="MQTT_PORT")
+    mqtt_username: str = Field(default="", env="MQTT_USERNAME")
+    mqtt_password: str = Field(default="", env="MQTT_PASSWORD")
+    
+    # CORS配置
+    allowed_origins: List[str] = Field(default=["http://localhost:3000"], env="ALLOWED_ORIGINS")
+    
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        case_sensitive = True
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -108,10 +119,11 @@ def create_default_servers_config(config_path: str):
             "ip": "192.168.1.100",
             "connection_type": "ssh",
             "username": "admin",
-            "password": "",  # 生产环境应使用密钥认证
+            "password": None,  # 生产环境应使用密钥认证
             "key_file": "~/.ssh/id_rsa",
             "expected_services": ["nginx", "mysql"],
-            "description": "主要Web服务器"
+            "description": "主要Web服务器",
+            "tags": ["web", "production"]
         },
         {
             "id": "server2",
@@ -119,10 +131,11 @@ def create_default_servers_config(config_path: str):
             "ip": "192.168.1.101",
             "connection_type": "ssh",
             "username": "admin",
-            "password": "",
+            "password": None,
             "key_file": "~/.ssh/id_rsa",
             "expected_services": ["postgresql", "redis"],
-            "description": "主数据库服务器"
+            "description": "主数据库服务器",
+            "tags": ["database", "production"]
         },
         {
             "id": "switch1",
@@ -130,9 +143,10 @@ def create_default_servers_config(config_path: str):
             "ip": "192.168.1.1",
             "connection_type": "telnet",
             "username": "admin",
-            "password": "admin",
+            "password": None,  # 生产环境应使用更安全的认证方式
             "device_type": "network",
-            "description": "核心交换机"
+            "description": "核心交换机",
+            "tags": ["network", "core"]
         },
         {
             "id": "cisco_ap_1",
@@ -163,7 +177,8 @@ def create_default_servers_config(config_path: str):
     with open(config_path, 'w') as f:
         json.dump(default_config, f, indent=2, ensure_ascii=False)
     
-    print(f"已创建默认服务器配置文件: {config_path}")
+    logger.info(f"已创建默认服务器配置文件: {config_path}")
+    logger.warning("请确保在生产环境中修改默认配置，特别是密码和认证信息！")
 
 # 创建默认LLM配置文件模板
 def create_default_llm_config(config_path: str):
