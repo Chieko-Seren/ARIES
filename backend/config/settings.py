@@ -11,12 +11,21 @@ import json
 from typing import Dict, List, Any, Optional
 from pydantic import BaseSettings, Field
 from dotenv import load_dotenv
+import logging
+from core.vault.manager import VaultManager
+
+logger = logging.getLogger(__name__)
 
 # 加载环境变量
 load_dotenv()
 
 class Settings(BaseSettings):
     """ARIES系统配置类"""
+    
+    # Vault配置
+    vault_url: str = Field(..., env="VAULT_URL")
+    vault_token: str = Field(..., env="VAULT_TOKEN")
+    vault_mount_point: str = Field(default="aries", env="VAULT_MOUNT_POINT")
     
     # 基本配置
     app_name: str = "ARIES"
@@ -26,16 +35,16 @@ class Settings(BaseSettings):
     
     # API配置
     api_prefix: str = "/api"
-    secret_key: str = Field(..., env="SECRET_KEY")  # 必须提供密钥
+    secret_key: str = Field(default="", env="SECRET_KEY")  # 将从Vault获取
     access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
     
     # 数据库配置
     db_path: str = Field(default="./data/aries.db", env="DB_PATH")
-    timescale_url: str = Field(..., env="TIMESCALE_URL")  # 必须提供数据库URL
+    timescale_url: str = Field(default="", env="TIMESCALE_URL")  # 将从Vault获取
     
     # LLM配置
     llm_provider: str = Field(default="openai", env="LLM_PROVIDER")
-    llm_api_key: str = Field(..., env="LLM_API_KEY")  # 必须提供API密钥
+    llm_api_key: str = Field(default="", env="LLM_API_KEY")  # 将从Vault获取
     llm_model: str = Field(default="gpt-4", env="LLM_MODEL")
     llm_config: Dict[str, Any] = {}
     
@@ -58,8 +67,8 @@ class Settings(BaseSettings):
     # MQTT配置
     mqtt_broker: str = Field(default="mqtt", env="MQTT_BROKER")
     mqtt_port: int = Field(default=1883, env="MQTT_PORT")
-    mqtt_username: str = Field(default="", env="MQTT_USERNAME")
-    mqtt_password: str = Field(default="", env="MQTT_PASSWORD")
+    mqtt_username: str = Field(default="", env="MQTT_USERNAME")  # 将从Vault获取
+    mqtt_password: str = Field(default="", env="MQTT_PASSWORD")  # 将从Vault获取
     
     # CORS配置
     allowed_origins: List[str] = Field(default=["http://localhost:3000"], env="ALLOWED_ORIGINS")
@@ -72,6 +81,7 @@ class Settings(BaseSettings):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._init_directories()
+        self._init_vault()
         self._load_llm_config()
     
     def _init_directories(self):
@@ -81,6 +91,57 @@ class Settings(BaseSettings):
         os.makedirs(os.path.dirname(self.vector_db_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.kg_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.servers_config_path), exist_ok=True)
+    
+    def _init_vault(self):
+        """初始化Vault并加载敏感配置"""
+        try:
+            vault = VaultManager(
+                url=self.vault_url,
+                token=self.vault_token,
+                mount_point=self.vault_mount_point
+            )
+            
+            # 加载敏感配置
+            secrets = {
+                "api": vault.get_secret("api"),
+                "database": vault.get_secret("database"),
+                "llm": vault.get_secret("llm"),
+                "mqtt": vault.get_secret("mqtt")
+            }
+            
+            # 更新配置
+            if secrets["api"]:
+                self.secret_key = secrets["api"].get("secret_key", self.secret_key)
+            
+            if secrets["database"]:
+                self.timescale_url = secrets["database"].get("url", self.timescale_url)
+            
+            if secrets["llm"]:
+                self.llm_api_key = secrets["llm"].get("api_key", self.llm_api_key)
+                self.llm_config.update(secrets["llm"])
+            
+            if secrets["mqtt"]:
+                self.mqtt_username = secrets["mqtt"].get("username", self.mqtt_username)
+                self.mqtt_password = secrets["mqtt"].get("password", self.mqtt_password)
+            
+            # 验证必需配置
+            self._validate_required_configs()
+            
+        except Exception as e:
+            logger.error(f"初始化Vault失败: {str(e)}")
+            raise
+    
+    def _validate_required_configs(self):
+        """验证必需配置是否存在"""
+        required_configs = {
+            "secret_key": self.secret_key,
+            "timescale_url": self.timescale_url,
+            "llm_api_key": self.llm_api_key
+        }
+        
+        missing_configs = [k for k, v in required_configs.items() if not v]
+        if missing_configs:
+            raise ValueError(f"缺少必需配置: {', '.join(missing_configs)}")
     
     def _load_llm_config(self):
         """加载LLM配置"""
