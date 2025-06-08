@@ -65,7 +65,7 @@ class FaultPredictor:
         """从数据库加载历史数据
         
         Returns:
-            历史数据DataFrame
+            历史数据DataFrame，如果加载失败则返回None
         """
         try:
             # 获取最近30天的故障记录
@@ -90,15 +90,65 @@ class FaultPredictor:
             records = self.db.execute_query(query)
             
             if not records:
+                self.logger.warning("没有找到历史故障记录")
                 return None
             
             # 转换为DataFrame
             df = pd.DataFrame(records)
+            
+            # 数据验证
+            required_columns = [
+                'server_id', 'timestamp', 'fault_type', 'severity',
+                'component', 'status', 'cpu_usage', 'memory_usage',
+                'disk_usage', 'network_usage', 'error_count'
+            ]
+            
+            # 检查必需列是否存在
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            if missing_columns:
+                raise ValueError(f"数据缺少必需列: {missing_columns}")
+            
+            # 数据类型转换和验证
             df['timestamp'] = pd.to_datetime(df['timestamp'])
+            df['server_id'] = df['server_id'].astype(str)
+            df['fault_type'] = df['fault_type'].astype(str)
+            df['severity'] = pd.to_numeric(df['severity'], errors='coerce')
+            df['component'] = df['component'].astype(str)
+            df['status'] = df['status'].astype(str)
+            
+            # 验证数值列的范围
+            numeric_columns = ['cpu_usage', 'memory_usage', 'disk_usage', 'network_usage', 'error_count']
+            for col in numeric_columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                # 检查是否在合理范围内
+                if col.endswith('_usage'):
+                    invalid_mask = (df[col] < 0) | (df[col] > 100)
+                    if invalid_mask.any():
+                        self.logger.warning(f"列 {col} 包含超出范围的值 (0-100): {df[invalid_mask][col].tolist()}")
+                        df.loc[invalid_mask, col] = df.loc[invalid_mask, col].clip(0, 100)
+                elif col == 'error_count':
+                    invalid_mask = df[col] < 0
+                    if invalid_mask.any():
+                        self.logger.warning(f"列 {col} 包含负值: {df[invalid_mask][col].tolist()}")
+                        df.loc[invalid_mask, col] = 0
+            
+            # 检查时间戳的连续性
+            df = df.sort_values('timestamp')
+            time_diff = df['timestamp'].diff()
+            large_gaps = time_diff[time_diff > pd.Timedelta(hours=24)]
+            if not large_gaps.empty:
+                self.logger.warning(f"数据中存在时间间隔超过24小时的记录: {large_gaps.index.tolist()}")
+            
+            # 检查重复记录
+            duplicates = df.duplicated(subset=['server_id', 'timestamp', 'fault_type'], keep=False)
+            if duplicates.any():
+                self.logger.warning(f"发现重复记录: {df[duplicates].index.tolist()}")
+                df = df.drop_duplicates(subset=['server_id', 'timestamp', 'fault_type'], keep='first')
+            
             return df
             
         except Exception as e:
-            logger.error(f"加载历史数据失败: {str(e)}")
+            self.logger.error(f"加载历史数据失败: {str(e)}")
             return None
     
     def _prepare_training_data(self, df: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray]:
@@ -109,15 +159,23 @@ class FaultPredictor:
             
         Returns:
             特征矩阵X和标签y
+            
+        Raises:
+            ValueError: 当数据准备失败时抛出
         """
         try:
+            if df is None or df.empty:
+                raise ValueError("输入数据为空")
+            
             # 特征工程
             df['hour'] = df['timestamp'].dt.hour
             df['day_of_week'] = df['timestamp'].dt.dayofweek
             df['is_weekend'] = df['day_of_week'].isin([5, 6]).astype(int)
             
-            # 计算故障率
-            df['fault_rate'] = df.groupby('server_id')['fault_type'].transform('count') / 30
+            # 计算故障率（使用滑动窗口）
+            df['fault_rate'] = df.groupby('server_id')['fault_type'].transform(
+                lambda x: x.rolling(window=24, min_periods=1).count() / 24
+            )
             
             # 选择特征
             features = [
@@ -126,6 +184,21 @@ class FaultPredictor:
                 'error_count', 'fault_rate'
             ]
             
+            # 检查特征是否存在
+            missing_features = [f for f in features if f not in df.columns]
+            if missing_features:
+                raise ValueError(f"缺少必需特征: {missing_features}")
+            
+            # 处理缺失值
+            for feature in features:
+                if df[feature].isnull().any():
+                    if feature in ['cpu_usage', 'memory_usage', 'disk_usage', 'network_usage']:
+                        # 使用前向填充和后向填充的组合
+                        df[feature] = df[feature].fillna(method='ffill').fillna(method='bfill')
+                    else:
+                        # 对于其他特征，使用中位数填充
+                        df[feature] = df[feature].fillna(df[feature].median())
+            
             # 准备标签（1表示发生故障，0表示正常）
             df['fault_occurred'] = (df['fault_type'].notna()).astype(int)
             
@@ -133,11 +206,18 @@ class FaultPredictor:
             X = self.scaler.fit_transform(df[features])
             y = df['fault_occurred'].values
             
+            # 验证数据
+            if np.isnan(X).any() or np.isinf(X).any():
+                raise ValueError("特征矩阵包含无效值 (NaN 或 Inf)")
+            
+            if not np.all(np.isfinite(y)):
+                raise ValueError("标签包含无效值")
+            
             return X, y
             
         except Exception as e:
-            logger.error(f"准备训练数据失败: {str(e)}")
-            return np.array([]), np.array([])
+            self.logger.error(f"准备训练数据失败: {str(e)}")
+            raise ValueError(f"数据准备失败: {str(e)}")
     
     def _train_models(self, X: np.ndarray, y: np.ndarray):
         """训练模型
