@@ -1,7 +1,9 @@
 # ARIES - AI Native 自动运维系统
 
-> 古都的节日，多的简直数不完。
+- 💫 2025年5月15日：我们引入了 ARIES 的 Web Lite 版本，现在 ARIES 的精简版可在您的浏览器运行！
+- ✅ 2025年6月8日：我们引入了 SQLite 和机器学习方法，并提交了该项目的子项目 OpenNIPS（开源网络安全防护系统）。
 
+> 古都的节日，多的简直数不完。
 > ————川端康成《古都》
 
 然而在现代 IT 的丛林中，运维的节日却常常是无休止的告警、深夜的抢修和永无止境的重复劳动！够了！这一切都将随着 ARIES (AI-powered Reliable Infrastructure & Enterprise Systems) 的降临而彻底改变！
