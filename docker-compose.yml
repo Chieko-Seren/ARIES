@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # MQTT Broker
+  mqtt:
+    image: eclipse-mosquitto:latest
+    ports:
+      - "1883:1883"  # MQTT 端口
+      - "9001:9001"  # WebSocket 端口
+    volumes:
+      - ./mqtt/config:/mosquitto/config
+      - ./mqtt/data:/mosquitto/data
+      - ./mqtt/log:/mosquitto/log
+    networks:
+      - aries-network
+
+  # 后端服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - MQTT_BROKER=mqtt
+      - MQTT_PORT=1883
+      - DATABASE_URL=postgresql://aries:aries@db:5432/aries
+    depends_on:
+      - mqtt
+      - db
+    networks:
+      - aries-network
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - aries-network
+
+  # 数据库服务
+  db:
+    image: postgres:13-alpine
+    environment:
+      - POSTGRES_USER=aries
+      - POSTGRES_PASSWORD=aries
+      - POSTGRES_DB=aries
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aries-network
+
+  # 时序数据库（用于存储物联网设备数据）
+  timescaledb:
+    image: timescale/timescaledb:latest-pg13
+    environment:
+      - POSTGRES_USER=aries
+      - POSTGRES_PASSWORD=aries
+      - POSTGRES_DB=aries_tsdb
+    volumes:
+      - timescale_data:/var/lib/postgresql/data
+    networks:
+      - aries-network
+
+networks:
+  aries-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  timescale_data: 
