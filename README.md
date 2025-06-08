@@ -1,6 +1,6 @@
 # ARIES - AI Native 自动运维系统
 
-> [!INFO]
+> [!TIP]
 > 🥰 现在您可以访问 docs 以获得基于 Vite 的 ARIES 文档。
 
 - 💫 2025年5月15日：我们引入了 ARIES 的 Web Lite 版本，现在 ARIES 的精简版可在您的浏览器运行！
