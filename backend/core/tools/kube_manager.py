@@ -9,35 +9,43 @@ ARIES - Kubernetes管理器
 import os
 import json
 import logging
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple
 from kubernetes import client, config
 
 class KubeManager:
     """Kubernetes管理器类，用于集群管理和操作"""
     
-    def __init__(self, kube_config_path: str):
+    SUPPORTED_RESOURCES = {
+        "pod": "core_api",
+        "service": "core_api",
+        "deployment": "apps_api",
+        "namespace": "core_api",
+        "configmap": "core_api",
+        "secret": "core_api",
+        "ingress": "networking_api",
+        "daemonset": "apps_api",
+        "statefulset": "apps_api",
+        "job": "batch_api",
+        "cronjob": "batch_api"
+    }
+    
+    def __init__(self, config_path: str):
         """初始化Kubernetes管理器
         
         Args:
-            kube_config_path: Kubernetes配置文件路径
+            config_path: kubeconfig文件路径
         """
-        self.kube_config_path = kube_config_path
-        self.logger = logging.getLogger("aries_kube")
-        
-        # 加载Kubernetes配置
-        self._load_config()
+        self.logger = logging.getLogger(__name__)
+        self.config_path = config_path
+        self._init_clients()
     
-    def _load_config(self):
-        """加载Kubernetes配置"""
+    def _init_clients(self):
+        """初始化Kubernetes客户端"""
         try:
-            # 处理路径中的~
-            if self.kube_config_path.startswith("~"):
-                self.kube_config_path = os.path.expanduser(self.kube_config_path)
-            
-            # 加载配置
-            if os.path.exists(self.kube_config_path):
-                config.load_kube_config(config_file=self.kube_config_path)
-                self.logger.info(f"已加载Kubernetes配置: {self.kube_config_path}")
+            # 加载Kubernetes配置
+            if os.path.exists(self.config_path):
+                config.load_kube_config(config_file=self.config_path)
+                self.logger.info(f"已加载Kubernetes配置: {self.config_path}")
             else:
                 # 尝试使用默认配置
                 config.load_kube_config()
@@ -52,6 +60,20 @@ class KubeManager:
         except Exception as e:
             self.logger.error(f"加载Kubernetes配置失败: {str(e)}")
             raise
+    
+    def _validate_resource_type(self, kind: str) -> Tuple[bool, str]:
+        """验证资源类型是否支持
+        
+        Args:
+            kind: 资源类型
+            
+        Returns:
+            (是否支持, 错误信息)
+        """
+        kind_lower = kind.lower()
+        if kind_lower not in self.SUPPORTED_RESOURCES:
+            return False, f"不支持的资源类型: {kind}，支持的资源类型: {', '.join(self.SUPPORTED_RESOURCES.keys())}"
+        return True, ""
     
     def get_cluster_state(self) -> Dict[str, Any]:
         """获取集群状态
@@ -224,54 +246,45 @@ class KubeManager:
             创建结果
         """
         try:
-            # 根据资源类型选择合适的API
+            # 验证资源类型
+            is_valid, error_msg = self._validate_resource_type(kind)
+            if not is_valid:
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
+            
+            namespace = spec.get("namespace", "default")
+            api_client = getattr(self, self.SUPPORTED_RESOURCES[kind.lower()])
+            
+            # 根据资源类型选择合适的API方法
             if kind.lower() == "pod":
-                response = self.core_api.create_namespaced_pod(
-                    namespace=spec.get("namespace", "default"),
+                response = api_client.create_namespaced_pod(
+                    namespace=namespace,
                     body=spec
                 )
-                return self._format_response(response)
-                
             elif kind.lower() == "service":
-                response = self.core_api.create_namespaced_service(
-                    namespace=spec.get("namespace", "default"),
+                response = api_client.create_namespaced_service(
+                    namespace=namespace,
                     body=spec
                 )
-                return self._format_response(response)
-                
             elif kind.lower() == "deployment":
-                response = self.apps_api.create_namespaced_deployment(
-                    namespace=spec.get("namespace", "default"),
+                response = api_client.create_namespaced_deployment(
+                    namespace=namespace,
                     body=spec
                 )
-                return self._format_response(response)
-                
             elif kind.lower() == "namespace":
-                response = self.core_api.create_namespace(
+                response = api_client.create_namespace(
                     body=spec
                 )
-                return self._format_response(response)
-                
-            elif kind.lower() == "job":
-                response = self.batch_api.create_namespaced_job(
-                    namespace=spec.get("namespace", "default"),
-                    body=spec
-                )
-                return self._format_response(response)
-                
-            elif kind.lower() == "ingress":
-                response = self.networking_api.create_namespaced_ingress(
-                    namespace=spec.get("namespace", "default"),
-                    body=spec
-                )
-                return self._format_response(response)
-                
             else:
                 return {
                     "success": False,
-                    "error": f"不支持的资源类型: {kind}"
+                    "error": f"暂不支持创建 {kind} 类型的资源"
                 }
-                
+            
+            return self._format_response(response)
+            
         except Exception as e:
             self.logger.error(f"创建资源失败: {str(e)}")
             return {
@@ -291,62 +304,49 @@ class KubeManager:
             更新结果
         """
         try:
-            namespace = spec.get("namespace", "default")
+            # 验证资源类型
+            is_valid, error_msg = self._validate_resource_type(kind)
+            if not is_valid:
+                return {
+                    "success": False,
+                    "error": error_msg
+                }
             
-            # 根据资源类型选择合适的API
+            namespace = spec.get("namespace", "default")
+            api_client = getattr(self, self.SUPPORTED_RESOURCES[kind.lower()])
+            
+            # 根据资源类型选择合适的API方法
             if kind.lower() == "pod":
-                response = self.core_api.patch_namespaced_pod(
+                response = api_client.patch_namespaced_pod(
                     name=name,
                     namespace=namespace,
                     body=spec
                 )
-                return self._format_response(response)
-                
             elif kind.lower() == "service":
-                response = self.core_api.patch_namespaced_service(
+                response = api_client.patch_namespaced_service(
                     name=name,
                     namespace=namespace,
                     body=spec
                 )
-                return self._format_response(response)
-                
             elif kind.lower() == "deployment":
-                response = self.apps_api.patch_namespaced_deployment(
+                response = api_client.patch_namespaced_deployment(
                     name=name,
                     namespace=namespace,
                     body=spec
                 )
-                return self._format_response(response)
-                
             elif kind.lower() == "namespace":
-                response = self.core_api.patch_namespace(
+                response = api_client.patch_namespace(
                     name=name,
                     body=spec
                 )
-                return self._format_response(response)
-                
-            elif kind.lower() == "job":
-                response = self.batch_api.patch_namespaced_job(
-                    name=name,
-                    namespace=namespace,
-                    body=spec
-                )
-                return self._format_response(response)
-                
-            elif kind.lower() == "ingress":
-                response = self.networking_api.patch_namespaced_ingress(
-                    name=name,
-                    namespace=namespace,
-                    body=spec
-                )
-                return self._format_response(response)
-                
             else:
                 return {
                     "success": False,
-                    "error": f"不支持的资源类型: {kind}"
+                    "error": f"暂不支持更新 {kind} 类型的资源"
                 }
-                
+            
+            return self._format_response(response)
+            
         except Exception as e:
             self.logger.error(f"更新资源失败: {str(e)}")
             return {
