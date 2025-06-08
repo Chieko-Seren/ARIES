@@ -11,6 +11,9 @@ find_package(Threads REQUIRED)
 find_package(libpcap REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(Torch REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(spdlog REQUIRED)
+find_package(Boost REQUIRED COMPONENTS system filesystem)
 
 # 设置编译选项
 add_compile_options(-Wall -Wextra -Wpedantic)
@@ -22,6 +25,9 @@ include_directories(
     ${LIBPCAP_INCLUDE_DIR}
     ${Protobuf_INCLUDE_DIRS}
     ${TORCH_INCLUDE_DIRS}
+    ${YAML_CPP_INCLUDE_DIR}
+    ${spdlog_INCLUDE_DIRS}
+    ${Boost_INCLUDE_DIRS}
 )
 
 # 添加子目录
@@ -42,4 +48,21 @@ install(TARGETS nips
 install(DIRECTORY include/
     DESTINATION include/nips
     FILES_MATCHING PATTERN "*.hpp"
+)
+
+# 安装配置文件
+install(DIRECTORY config/
+    DESTINATION etc/nips
+    FILES_MATCHING PATTERN "*.yaml"
+)
+
+# 安装系统服务文件
+install(FILES scripts/nips.service
+    DESTINATION /etc/systemd/system
+)
+
+# 安装启动脚本
+install(PROGRAMS scripts/nips-start.sh
+    DESTINATION bin
+    RENAME nips-start
 ) 
