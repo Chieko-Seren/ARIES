@@ -30,6 +30,7 @@ class FaultPredictor:
             db: 数据库实例
         """
         self.db = db
+        self.logger = logging.getLogger(__name__)
         self.rf_model = RandomForestClassifier(
             n_estimators=100,
             max_depth=10,
@@ -53,13 +54,13 @@ class FaultPredictor:
                 if len(X) > 0 and len(y) > 0:
                     # 训练模型
                     self._train_models(X, y)
-                    logger.info("模型初始化成功")
+                    self.logger.info("模型初始化成功")
                 else:
-                    logger.warning("训练数据不足，使用默认模型")
+                    self.logger.warning("训练数据不足，使用默认模型")
             else:
-                logger.warning("无历史数据，使用默认模型")
+                self.logger.warning("无历史数据，使用默认模型")
         except Exception as e:
-            logger.error(f"模型初始化失败: {str(e)}")
+            self.logger.error(f"模型初始化失败: {str(e)}")
     
     def _load_historical_data(self) -> Optional[pd.DataFrame]:
         """从数据库加载历史数据
@@ -245,11 +246,11 @@ class FaultPredictor:
             recall = recall_score(y_test, y_pred)
             f1 = f1_score(y_test, y_pred)
             
-            logger.info(f"模型评估结果 - 准确率: {accuracy:.2f}, 精确率: {precision:.2f}, "
+            self.logger.info(f"模型评估结果 - 准确率: {accuracy:.2f}, 精确率: {precision:.2f}, "
                        f"召回率: {recall:.2f}, F1分数: {f1:.2f}")
             
         except Exception as e:
-            logger.error(f"训练模型失败: {str(e)}")
+            self.logger.error(f"训练模型失败: {str(e)}")
     
     def predict_fault_probability(self, server_data: Dict[str, Any]) -> Dict[str, Any]:
         """预测故障概率
@@ -294,7 +295,7 @@ class FaultPredictor:
             }
             
         except Exception as e:
-            logger.error(f"预测故障概率失败: {str(e)}")
+            self.logger.error(f"预测故障概率失败: {str(e)}")
             return {
                 "fault_probability": 0.0,
                 "anomaly_score": 0.0,
@@ -346,7 +347,7 @@ class FaultPredictor:
             ]
             
         except Exception as e:
-            logger.error(f"准备特征数据失败: {str(e)}")
+            self.logger.error(f"准备特征数据失败: {str(e)}")
             return None
     
     def _determine_risk_level(self, fault_prob: float, anomaly_score: float) -> str:
@@ -405,13 +406,13 @@ class FaultPredictor:
                 if len(X) > 0 and len(y) > 0:
                     # 重新训练模型
                     self._train_models(X, y)
-                    logger.info("模型更新成功")
+                    self.logger.info("模型更新成功")
                 else:
-                    logger.warning("训练数据不足，模型未更新")
+                    self.logger.warning("训练数据不足，模型未更新")
             else:
-                logger.warning("无历史数据，模型未更新")
+                self.logger.warning("无历史数据，模型未更新")
         except Exception as e:
-            logger.error(f"更新模型失败: {str(e)}")
+            self.logger.error(f"更新模型失败: {str(e)}")
     
     def save_model(self, path: str):
         """保存模型
@@ -426,9 +427,9 @@ class FaultPredictor:
                 'scaler': self.scaler
             }
             joblib.dump(model_data, path)
-            logger.info(f"模型保存成功: {path}")
+            self.logger.info(f"模型保存成功: {path}")
         except Exception as e:
-            logger.error(f"保存模型失败: {str(e)}")
+            self.logger.error(f"保存模型失败: {str(e)}")
     
     def load_model(self, path: str):
         """加载模型
@@ -441,6 +442,6 @@ class FaultPredictor:
             self.rf_model = model_data['rf_model']
             self.isolation_forest = model_data['isolation_forest']
             self.scaler = model_data['scaler']
-            logger.info(f"模型加载成功: {path}")
+            self.logger.info(f"模型加载成功: {path}")
         except Exception as e:
-            logger.error(f"加载模型失败: {str(e)}") 
+            self.logger.error(f"加载模型失败: {str(e)}") 
