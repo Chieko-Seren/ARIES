@@ -1,0 +1,62 @@
+# NIPS 配置文件
+
+# 捕获配置
+capture:
+  interface: "eth0"  # 监控的网络接口
+  filter: ""        # BPF过滤器
+  buffer_size: 65535
+  timeout_ms: 1000
+  promiscuous: true
+
+# 特征提取配置
+feature:
+  flow_timeout_seconds: 300
+  max_packets_per_flow: 1000
+  enable_deep_packet_inspection: true
+  enabled_features:
+    - "basic_stats"
+    - "protocol_distribution"
+    - "payload_entropy"
+    - "time_features"
+    - "connection_pattern"
+
+# 机器学习配置
+ml:
+  model_type: "deep_learning"  # 或 "traditional_ml"
+  model_path: "/etc/nips/models/anomaly_detector.pt"
+  anomaly_threshold: 0.85
+  batch_size: 64
+  enable_gpu: true
+
+# 威胁检测配置
+detection:
+  threat_thresholds:
+    low: 0.6
+    medium: 0.75
+    high: 0.85
+    critical: 0.95
+  intel_source: "/etc/nips/intel/threat_intel.json"
+  max_threats_history: 1000
+  enable_correlation: true
+
+# 响应配置
+response:
+  policy_path: "/etc/nips/policies/response_policy.yaml"
+  enable_auto_response: true
+  max_concurrent_actions: 100
+  log_path: "/var/log/nips/response.log"
+
+# 日志配置
+logging:
+  level: "info"  # trace, debug, info, warn, error, critical
+  file: "/var/log/nips/nips.log"
+  max_size: 104857600  # 100MB
+  max_files: 5
+  console: true
+
+# 系统配置
+system:
+  threads: 4
+  queue_size: 10000
+  memory_limit: 1073741824  # 1GB
+  check_interval: 60  # 秒 
