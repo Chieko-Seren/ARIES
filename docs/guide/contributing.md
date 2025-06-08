@@ -13,7 +13,7 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/ARIES.git
+git clone https://github.com/Chieko-Seren/ARIES
 cd ARIES
 
 # 添加上游仓库
@@ -164,7 +164,7 @@ git push origin feature/your-feature-name
 ## 联系方式
 
 - 项目维护者：@Chieko-Seren
-- 邮件：your-email@example.com
+- 邮件：chieko.seren@icloud.com
 - 讨论区：GitHub Discussions
 
 ## 致谢
