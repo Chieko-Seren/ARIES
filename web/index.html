@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARIES Web - 智能网络管理平台</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <!-- 使用 ES 模块版本的 Three.js -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+    <!-- 使用 WebSocket SSH 客户端 -->
+    <script src="https://cdn.jsdelivr.net/npm/websocket-ssh@1.0.0/dist/websocket-ssh.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.5/dist/js.cookie.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="css/style.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100">
+    <div id="app" class="min-h-screen">
+        <!-- 导航栏 -->
+        <nav class="bg-blue-600 text-white shadow-lg">
+            <div class="container mx-auto px-6 py-3">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="text-xl font-bold">ARIES Web</span>
+                    </div>
+                    <div class="flex space-x-4">
+                        <a href="#" class="hover:text-blue-200" @click="currentView = 'dashboard'">仪表盘</a>
+                        <a href="#" class="hover:text-blue-200" @click="currentView = 'servers'">服务器管理</a>
+                        <a href="#" class="hover:text-blue-200" @click="currentView = 'network'">网络配置</a>
+                        <a href="#" class="hover:text-blue-200" @click="currentView = 'plugins'">插件中心</a>
+                        <a href="#" class="hover:text-blue-200" @click="currentView = 'rag'">知识库</a>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主要内容区域 -->
+        <main class="container mx-auto px-6 py-8">
+            <!-- 仪表盘视图 -->
+            <div v-if="currentView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4">服务器状态</h2>
+                    <div class="space-y-4">
+                        <div v-for="server in servers" :key="server.id" class="flex items-center justify-between">
+                            <span>{{ server.name }}</span>
+                            <span :class="server.status === 'online' ? 'text-green-500' : 'text-red-500'">
+                                {{ server.status }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4">最近操作</h2>
+                    <div class="space-y-2">
+                        <div v-for="log in recentLogs" :key="log.id" class="text-sm">
+                            {{ log.message }}
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4">快速操作</h2>
+                    <div class="space-y-4">
+                        <button @click="openTerminal" class="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                            打开终端
+                        </button>
+                        <button @click="openNetworkConfig" class="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                            网络配置
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 服务器管理视图 -->
+            <div v-if="currentView === 'servers'" class="bg-white rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-semibold">服务器管理</h2>
+                    <button @click="showAddServerModal = true" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        添加服务器
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div v-for="server in servers" :key="server.id" class="border rounded-lg p-4">
+                        <h3 class="font-semibold mb-2">{{ server.name }}</h3>
+                        <p class="text-sm text-gray-600">IP: {{ server.ip }}</p>
+                        <p class="text-sm text-gray-600">状态: {{ server.status }}</p>
+                        <div class="mt-4 space-x-2">
+                            <button @click="connectServer(server)" class="bg-green-500 text-white px-3 py-1 rounded text-sm">
+                                连接
+                            </button>
+                            <button @click="editServer(server)" class="bg-blue-500 text-white px-3 py-1 rounded text-sm">
+                                编辑
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 网络配置视图 -->
+            <div v-if="currentView === 'network'" class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-6">网络配置</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-semibold mb-4">Cisco 配置生成器</h3>
+                        <textarea v-model="ciscoPrompt" class="w-full h-32 p-2 border rounded" 
+                            placeholder="输入自然语言描述您想要的网络配置..."></textarea>
+                        <button @click="generateCiscoConfig" class="mt-4 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                            生成配置
+                        </button>
+                    </div>
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-semibold mb-4">生成的配置</h3>
+                        <pre class="bg-gray-100 p-4 rounded overflow-x-auto">{{ generatedConfig }}</pre>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 插件中心视图 -->
+            <div v-if="currentView === 'plugins'" class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-6">插件中心</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div v-for="plugin in plugins" :key="plugin.id" class="border rounded-lg p-4">
+                        <h3 class="font-semibold mb-2">{{ plugin.name }}</h3>
+                        <p class="text-sm text-gray-600 mb-4">{{ plugin.description }}</p>
+                        <button @click="togglePlugin(plugin)" 
+                            :class="plugin.enabled ? 'bg-red-500' : 'bg-green-500'"
+                            class="text-white px-4 py-2 rounded hover:opacity-90">
+                            {{ plugin.enabled ? '禁用' : '启用' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 知识库视图 -->
+            <div v-if="currentView === 'rag'" class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold mb-6">知识库管理</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-semibold mb-4">向量搜索</h3>
+                        <input v-model="searchQuery" type="text" 
+                            class="w-full p-2 border rounded mb-4" 
+                            placeholder="输入搜索关键词...">
+                        <button @click="searchVectors" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                            搜索
+                        </button>
+                    </div>
+                    <div class="border rounded-lg p-4">
+                        <h3 class="font-semibold mb-4">搜索结果</h3>
+                        <div class="space-y-4">
+                            <div v-for="result in searchResults" :key="result.id" class="border-b pb-4">
+                                <p class="font-medium">{{ result.title }}</p>
+                                <p class="text-sm text-gray-600">{{ result.content }}</p>
+                                <p class="text-xs text-gray-500">相似度: {{ result.similarity }}%</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 向量空间可视化 -->
+            <div v-if="currentView === 'rag'" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="border rounded-lg p-4">
+                    <h3 class="font-semibold mb-4">向量空间可视化</h3>
+                    <canvas id="vectorSpace" class="w-full h-96 bg-gray-900 rounded"></canvas>
+                </div>
+                <div class="border rounded-lg p-4">
+                    <h3 class="font-semibold mb-4">向量分布统计</h3>
+                    <canvas id="vectorStats" class="w-full h-96"></canvas>
+                </div>
+            </div>
+
+            <!-- 服务器性能监控 -->
+            <div v-if="currentView === 'dashboard'" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4">CPU 使用率</h2>
+                    <canvas id="cpuChart" class="w-full h-64"></canvas>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-semibold mb-4">内存使用率</h2>
+                    <canvas id="memoryChart" class="w-full h-64"></canvas>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- SSH 终端模态框 -->
+    <div v-show="showTerminal && selectedServer" class="modal-overlay">
+        <div class="modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-white">SSH 终端 - {{ selectedServer.name }}</h3>
+                <button @click="closeTerminal" class="text-gray-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="terminal">
+                <div v-for="(line, index) in terminalOutput" :key="index" class="terminal-line">
+                    {{ line }}
+                </div>
+                <div class="terminal-input-line">
+                    <span class="text-green-500">$</span>
+                    <input v-model="terminalInput" 
+                           @keyup.enter="handleTerminalInput"
+                           class="terminal-input ml-2"
+                           :disabled="isConnecting"
+                           placeholder="输入命令...">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 使用 type="module" 加载应用脚本 -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html> 
