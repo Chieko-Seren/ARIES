@@ -25,42 +25,52 @@ const getters = {
 // actions
 const actions = {
   // 获取网络拓扑
-  async fetchTopology({ commit }) {
+  async fetchTopology({ commit, dispatch }) {
     commit('SET_LOADING', true)
     commit('SET_ERROR', null)
     
-    try {
-      // 假设有一个获取网络拓扑的API
-      // 实际项目中应该从后端获取
-      // 这里使用模拟数据
-      const topology = {
-        nodes: [
-          { id: 'router1', type: 'router', ip: '192.168.1.1', name: '核心路由器' },
-          { id: 'switch1', type: 'switch', ip: '192.168.1.2', name: '交换机1' },
-          { id: 'switch2', type: 'switch', ip: '192.168.1.3', name: '交换机2' },
-          { id: 'server1', type: 'server', ip: '192.168.1.100', name: 'Web服务器' },
-          { id: 'server2', type: 'server', ip: '192.168.1.101', name: '数据库服务器' },
-          { id: 'server3', type: 'server', ip: '192.168.1.102', name: '应用服务器' },
-          { id: 'ap1', type: 'ap', ip: '192.168.1.10', name: '无线AP1' }
-        ],
-        links: [
-          { source: 'router1', target: 'switch1', id: 'link1' },
-          { source: 'router1', target: 'switch2', id: 'link2' },
-          { source: 'switch1', target: 'server1', id: 'link3' },
-          { source: 'switch1', target: 'server2', id: 'link4' },
-          { source: 'switch2', target: 'server3', id: 'link5' },
-          { source: 'switch2', target: 'ap1', id: 'link6' }
-        ]
+    let retryCount = 0
+    const maxRetries = 3
+    const retryDelay = 2000 // 2秒
+    
+    while (retryCount < maxRetries) {
+      try {
+        const response = await axios.get('/api/network/topology')
+        if (!response.data) {
+          throw new Error('服务器返回数据为空')
+        }
+        
+        // 验证数据格式
+        if (!Array.isArray(response.data.nodes) || !Array.isArray(response.data.links)) {
+          throw new Error('服务器返回数据格式错误')
+        }
+        
+        commit('SET_TOPOLOGY', response.data)
+        return response.data
+        
+      } catch (error) {
+        retryCount++
+        const errorMessage = error.response?.data?.message || error.message || '获取网络拓扑失败'
+        
+        if (retryCount === maxRetries) {
+          console.error(`获取网络拓扑失败 (尝试 ${retryCount}/${maxRetries}):`, error)
+          commit('SET_ERROR', {
+            message: errorMessage,
+            code: error.response?.status,
+            retryCount
+          })
+          // 通知用户
+          dispatch('notification/showError', {
+            title: '网络拓扑获取失败',
+            message: `请检查网络连接后重试 (${errorMessage})`,
+            duration: 5000
+          }, { root: true })
+          return { nodes: [], links: [] }
+        }
+        
+        console.warn(`获取网络拓扑重试 (${retryCount}/${maxRetries}):`, error)
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
       }
-      
-      commit('SET_TOPOLOGY', topology)
-      return topology
-    } catch (error) {
-      console.error('获取网络拓扑失败:', error)
-      commit('SET_ERROR', '获取网络拓扑失败')
-      return { nodes: [], links: [] }
-    } finally {
-      commit('SET_LOADING', false)
     }
   },
 
