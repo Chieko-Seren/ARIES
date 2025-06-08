@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <chrono>
 #include <thread>
+#include <mutex>
 
 namespace nips {
 namespace capture {
@@ -18,6 +19,8 @@ private:
     std::string interface_;
     std::string filter_;
     std::unique_ptr<std::thread> capture_thread_;
+    PacketCallback callback_;
+    std::mutex callback_mutex_;  // 保护callback_的互斥锁
     
     // RAII包装器类
     class PcapHandleGuard {
@@ -117,6 +120,10 @@ public:
         if (capture_thread_ && capture_thread_->joinable()) {
             capture_thread_->join();
         }
+        {
+            std::lock_guard<std::mutex> lock(callback_mutex_);
+            callback_ = nullptr;
+        }
         if (handle_) {
             pcap_close(handle_);
             handle_ = nullptr;
@@ -129,7 +136,10 @@ public:
         }
 
         running_ = true;
-        callback_ = std::move(callback);
+        {
+            std::lock_guard<std::mutex> lock(callback_mutex_);
+            callback_ = std::move(callback);
+        }
 
         // 启动捕获线程
         capture_thread_ = std::thread([this]() {
@@ -157,6 +167,7 @@ public:
                     }
                     
                     // 调用回调函数
+                    std::lock_guard<std::mutex> lock(callback_mutex_);
                     if (callback_) {
                         callback_(info);
                     }
