@@ -8,7 +8,6 @@ ARIES - AI Native 自动运维系统主程序
 import os
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
@@ -19,8 +18,9 @@ import threading
 # 导入内部模块
 from config.settings import Settings
 from core.agent import Agent
-from api.auth import create_access_token, get_current_user, verify_password, get_password_hash
-from api.models import User, Token, ServerInfo, TaskRequest, ShellRequest, KubeRequest, NetworkRequest
+from core.auth.router import router as auth_router
+from core.auth.init_db import init_db
+from core.database import SessionLocal
 from api.routes import router as api_router
 
 # 加载配置
@@ -43,6 +43,7 @@ app.add_middleware(
 )
 
 # 包含API路由
+app.include_router(auth_router)  # 添加认证和授权路由
 app.include_router(api_router)
 
 # 创建Agent实例
@@ -64,6 +65,13 @@ def start_scheduler():
 @app.on_event("startup")
 async def startup_event():
     """应用启动时执行"""
+    # 初始化数据库
+    db = SessionLocal()
+    try:
+        init_db(db)
+    finally:
+        db.close()
+    
     # 启动定时任务线程
     scheduler_thread = threading.Thread(target=start_scheduler, daemon=True)
     scheduler_thread.start()
