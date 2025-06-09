@@ -1,9 +1,14 @@
 // 导入依赖
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import ModelManager from './components/ModelManager.js';
+import ModelSettings from './components/ModelSettings.js';
 
 // Vue 应用程序
 const { createApp, ref, onMounted, watch } = Vue;
+
+// 初始化模型管理器
+ModelManager.init();
 
 // 常量定义
 const OPENAI_API_URL = 'https://api.moleapi.com/v1/chat/completions';
@@ -31,8 +36,13 @@ const vectorSpaceChart = ref(null);
 const vectorStatsChart = ref(null);
 const cpuChart = ref(null);
 const memoryChart = ref(null);
+const showModelSettings = ref(false);
 
 const app = createApp({
+    components: {
+        'model-settings': ModelSettings
+    },
+    
     setup() {
         // 初始化
         onMounted(async () => {
@@ -221,47 +231,25 @@ const app = createApp({
 
         const handleLLMCommand = async (prompt) => {
             try {
-                const response = await fetch(OPENAI_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${OPENAI_API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        model: 'qwen/qwen-2.5-vl-72b-instruct:free',
-                        messages: [
-                            {
-                                role: 'system',
-                                content: '你是一个专业的网络工程师，精通服务器管理和网络配置。请根据用户的自然语言描述，生成相应的命令并解释其作用。'
-                            },
-                            {
-                                role: 'user',
-                                content: `当前服务器信息：${JSON.stringify(selectedServer.value)}\n用户请求：${prompt}`
-                            }
-                        ],
-                        temperature: 0.7
-                    })
-                });
-
-                const data = await response.json();
-                if (data.choices && data.choices[0]) {
-                    const llmResponse = data.choices[0].message.content;
-                    terminalOutput.value.push('LLM 分析:');
-                    terminalOutput.value.push(llmResponse);
-
-                    // 提取命令并执行
-                    const commands = llmResponse.match(/```bash\n([\s\S]*?)\n```/g);
-                    if (commands) {
-                        for (const cmd of commands) {
-                            const command = cmd.replace(/```bash\n|\n```/g, '').trim();
-                            terminalOutput.value.push(`执行命令: ${command}`);
-                            await executeSSHCommand(command);
-                        }
-                    }
-                }
+                const systemMessage = '你是一个专业的网络工程师，精通服务器管理和网络配置。请根据用户的自然语言描述，生成相应的命令并解释其作用。';
+                
+                terminalOutput.value.push('正在使用 ' + ModelManager.getCurrentModelConfig().name + ' 处理请求...');
+                
+                const response = await ModelManager.callModelAPI(
+                    `当前服务器信息：${JSON.stringify(selectedServer.value)}\n用户请求：${prompt}`,
+                    systemMessage
+                );
+                
+                terminalOutput.value.push('LLM 分析:');
+                terminalOutput.value.push(response);
+                
             } catch (error) {
-                console.error('LLM 命令处理失败:', error);
-                terminalOutput.value.push(`LLM 错误: ${error.message}`);
+                console.error('LLM处理失败:', error);
+                terminalOutput.value.push(`错误: ${error.message}`);
+                
+                if (error.message.includes('API密钥')) {
+                    showModelSettings.value = true;
+                }
             }
         };
 
@@ -549,31 +537,49 @@ const app = createApp({
 
         // 知识库管理
         const searchVectors = async () => {
-            if (!searchQuery.value.trim()) {
-                addLog('请输入搜索关键词');
-                return;
-            }
-
             try {
-                // 这里应该实现实际的向量搜索逻辑
-                // 示例数据
-                searchResults.value = [
-                    {
-                        id: 1,
-                        title: 'Cisco 交换机基本配置',
-                        content: '如何配置 Cisco 交换机的基本参数...',
-                        similarity: 95
+                if (!searchQuery.value.trim()) {
+                    throw new Error('请输入搜索关键词');
+                }
+                
+                const systemMessage = '你是一个专业的搜索助手，请根据用户的搜索请求，生成相关的搜索关键词和过滤条件。';
+                
+                // 使用当前模型生成搜索优化
+                const searchOptimization = await ModelManager.callModelAPI(
+                    searchQuery.value,
+                    systemMessage
+                );
+                
+                // 执行向量搜索
+                const response = await fetch('/api/vector/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
                     },
-                    {
-                        id: 2,
-                        title: 'VLAN 配置指南',
-                        content: 'VLAN 的创建和配置方法...',
-                        similarity: 85
-                    }
-                ];
+                    body: JSON.stringify({
+                        query: searchQuery.value,
+                        optimization: searchOptimization
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('搜索请求失败');
+                }
+                
+                const data = await response.json();
+                searchResults.value = data.results;
+                
             } catch (error) {
-                console.error('搜索知识库失败:', error);
-                addLog('搜索知识库失败: ' + error.message);
+                console.error('搜索失败:', error);
+                searchResults.value = [{
+                    title: '错误',
+                    content: error.message,
+                    similarity: 0
+                }];
+                
+                if (error.message.includes('API密钥')) {
+                    showModelSettings.value = true;
+                }
             }
         };
 
@@ -621,53 +627,26 @@ const app = createApp({
 
         // 网络配置生成
         const generateCiscoConfig = async () => {
-            if (!ciscoPrompt.value.trim()) {
-                addLog('请输入配置描述');
-                return;
-            }
-
             try {
-                const response = await fetch(OPENAI_API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${OPENAI_API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        model: 'qwen/qwen2.5-vl-72b-instruct:free',
-                        messages: [
-                            {
-                                role: 'system',
-                                content: '你是一个专业的网络工程师，精通服务器管理和网络配置。请根据用户的自然语言描述，生成相应的命令。不要输出任何多余文本，只输出 Cisco 配置指令，不要输出任何markdown语法和解释性文本以及多余的内容，不要进行解释，只输出代码，如果你需要解释，写在注释里，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本'
-                            },
-                            {
-                                role: 'user',
-                                content: '打开 STP'
-                            },
-                            {
-                                role: 'assistant',
-                                content: 'enable\nconfigure terminal\nspanning-tree vlan <vlan_number>\nspanning-tree mode rapid-pvst\nspanning-tree vlan <vlan_number> priority <priority_number>\nwrite memory'
-                            },
-                            {
-                                role: 'user',
-                                content: `你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，当前服务器信息：${JSON.stringify(selectedServer.value)}\n用户请求：${ciscoPrompt.value}，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出，你应该输出并且只输出配置文件，不输出任何markdoown和解释性文本，不要输出任何多余的话，除了代码什么都不要输出`
-                            }
-                        ],
-                        temperature: 0.7
-                    })
-                });
-
-                const data = await response.json();
-                if (data.choices && data.choices[0]) {
-                    generatedConfig.value = data.choices[0].message.content;
-                    addLog('已生成 Cisco 配置');
-                } else {
-                    throw new Error('生成配置失败');
+                if (!ciscoPrompt.value.trim()) {
+                    throw new Error('请输入配置描述');
                 }
+                
+                const systemMessage = '你是一个专业的网络工程师，精通Cisco设备配置。请根据用户的自然语言描述，生成相应的Cisco配置命令。';
+                
+                generatedConfig.value = '正在使用 ' + ModelManager.getCurrentModelConfig().name + ' 生成配置...';
+                
+                const response = await ModelManager.callModelAPI(ciscoPrompt.value, systemMessage);
+                
+                generatedConfig.value = response;
+                
             } catch (error) {
-                console.error('生成 Cisco 配置失败:', error);
-                addLog('生成 Cisco 配置失败: ' + error.message);
-                generatedConfig.value = '生成配置时发生错误，请检查 API 密钥和网络连接。';
+                console.error('生成配置失败:', error);
+                generatedConfig.value = `错误: ${error.message}`;
+                
+                if (error.message.includes('API密钥')) {
+                    showModelSettings.value = true;
+                }
             }
         };
 
@@ -678,6 +657,11 @@ const app = createApp({
                 selectedServer: selectedServer.value,
                 isConnecting: isConnecting.value
             });
+        };
+
+        // 添加模型设置相关方法
+        const toggleModelSettings = () => {
+            showModelSettings.value = !showModelSettings.value;
         };
 
         return {
@@ -703,6 +687,7 @@ const app = createApp({
             sshClient,
             vectorData,
             serverStats,
+            showModelSettings,
 
             // 方法
             connectServer,
@@ -714,7 +699,8 @@ const app = createApp({
             openNetworkConfig,
             closeTerminal,
             handleLLMCommand,
-            debugState
+            debugState,
+            toggleModelSettings
         };
     }
 });

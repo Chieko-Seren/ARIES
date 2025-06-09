@@ -38,6 +38,16 @@
                         <a href="#" class="hover:text-blue-200" @click="currentView = 'network'">网络配置</a>
                         <a href="#" class="hover:text-blue-200" @click="currentView = 'plugins'">插件中心</a>
                         <a href="#" class="hover:text-blue-200" @click="currentView = 'rag'">知识库</a>
+                        <button @click="toggleModelSettings" 
+                                class="hover:text-blue-200 flex items-center space-x-1">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span>模型设置</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -189,30 +199,47 @@
                 </div>
             </div>
         </main>
-    </div>
 
-    <!-- SSH 终端模态框 -->
-    <div v-show="showTerminal && selectedServer" class="modal-overlay">
-        <div class="modal-content">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-white">SSH 终端 - {{ selectedServer.name }}</h3>
-                <button @click="closeTerminal" class="text-gray-400 hover:text-white">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
-            <div class="terminal">
-                <div v-for="(line, index) in terminalOutput" :key="index" class="terminal-line">
-                    {{ line }}
+        <!-- 模型设置模态框 -->
+        <div v-if="showModelSettings" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div class="flex justify-between items-center p-6 border-b">
+                    <h2 class="text-xl font-semibold">模型设置</h2>
+                    <button @click="toggleModelSettings" class="text-gray-500 hover:text-gray-700">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
-                <div class="terminal-input-line">
-                    <span class="text-green-500">$</span>
-                    <input v-model="terminalInput" 
-                           @keyup.enter="handleTerminalInput"
-                           class="terminal-input ml-2"
-                           :disabled="isConnecting"
-                           placeholder="输入命令...">
+                <div class="p-6">
+                    <model-settings></model-settings>
+                </div>
+            </div>
+        </div>
+
+        <!-- SSH 终端模态框 -->
+        <div v-show="showTerminal && selectedServer" class="modal-overlay">
+            <div class="modal-content">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-white">SSH 终端 - {{ selectedServer.name }}</h3>
+                    <button @click="closeTerminal" class="text-gray-400 hover:text-white">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="terminal">
+                    <div v-for="(line, index) in terminalOutput" :key="index" class="terminal-line">
+                        {{ line }}
+                    </div>
+                    <div class="terminal-input-line">
+                        <span class="text-green-500">$</span>
+                        <input v-model="terminalInput" 
+                               @keyup.enter="handleTerminalInput"
+                               class="terminal-input ml-2"
+                               :disabled="isConnecting"
+                               placeholder="输入命令...">
+                    </div>
                 </div>
             </div>
         </div>
