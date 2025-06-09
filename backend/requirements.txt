@@ -55,3 +55,8 @@ timescale-db==0.1.0
 
 # Vault 依赖
 hvac>=1.1.1  # Vault客户端
+
+# RWKV 相关依赖
+rwkv>=0.8.0
+torch>=2.0.0
+tokenizers>=0.13.0

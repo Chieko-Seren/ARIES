@@ -1,0 +1,7 @@
+# LLM相关依赖
+llama-cpp-python>=0.2.0
+tokenizers>=0.13.0
+
+# RWKV相关依赖
+torch>=2.0.0
+rwkv>=0.8.0 

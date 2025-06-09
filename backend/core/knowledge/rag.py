@@ -12,6 +12,8 @@ import logging
 from typing import Dict, List, Any, Optional
 import requests
 from ..database.db import Database
+from ..llm.rwkv_manager import RWKVManager
+from ..llm.model_classifier import ModelClassifier, ModelType
 
 class RAG:
     """检索增强生成类，用于智能推理"""
@@ -28,6 +30,43 @@ class RAG:
         self.db = db
         self.llm_config = llm_config
         self.logger = logging.getLogger("aries_rag")
+        
+        # 初始化模型分类器
+        self.model_classifier = ModelClassifier(llm_config)
+        
+        # 初始化模型管理器
+        self.model_managers = {}
+        self._init_model_managers()
+    
+    def _init_model_managers(self):
+        """初始化模型管理器"""
+        try:
+            # 为每种模型类型创建管理器
+            for model_type in ModelType:
+                model_config = self.model_classifier.get_model_config(model_type)
+                if model_type == ModelType.RWKV:
+                    self.model_managers[model_type] = RWKVManager(
+                        model_config["model_path"],
+                        model_config
+                    )
+                # OpenAI模型不需要特殊初始化
+                
+        except Exception as e:
+            self.logger.error(f"初始化模型管理器失败: {str(e)}")
+            raise
+    
+    def _get_model_manager(self, model_type: ModelType):
+        """获取模型管理器
+        
+        Args:
+            model_type: 模型类型
+            
+        Returns:
+            模型管理器实例
+        """
+        if model_type == ModelType.RWKV:
+            return self.model_managers.get(model_type)
+        return None  # OpenAI模型直接使用API调用
     
     def _get_prompt_template(self, prompt_id: str) -> Dict[str, Any]:
         """获取提示词模板
@@ -63,30 +102,41 @@ class RAG:
             LLM响应
         """
         try:
-            provider = self.llm_config.get("provider", "openai").lower()
+            # 使用模型分类器选择合适的模型
+            _, model_type = self.model_classifier.classify_task(prompt, system_message)
+            model_config = self.model_classifier.get_model_config(model_type)
             
-            if provider == "openai":
-                return self._call_openai(prompt, system_message)
+            # 根据模型类型选择调用方式
+            if model_type == ModelType.RWKV:
+                model_manager = self._get_model_manager(model_type)
+                if not model_manager:
+                    raise ValueError("RWKV模型未初始化")
+                return model_manager.generate(prompt, system_message)
             else:
-                raise ValueError(f"不支持的LLM提供商: {provider}")
+                # OpenAI模型调用
+                return self._call_openai(prompt, system_message, model_config)
                 
         except Exception as e:
             self.logger.error(f"调用LLM失败: {str(e)}")
             raise
     
-    def _call_openai(self, prompt: str, system_message: str = None) -> Dict[str, Any]:
+    def _call_openai(self, prompt: str, system_message: str = None, model_config: Dict[str, Any] = None) -> Dict[str, Any]:
         """调用OpenAI API
         
         Args:
             prompt: 提示词
             system_message: 系统消息
+            model_config: 模型配置
             
         Returns:
             OpenAI响应
         """
         import openai
         
-        openai.api_key = self.llm_config.get("api_key")
+        if not model_config:
+            model_config = self.llm_config
+        
+        openai.api_key = model_config.get("api_key")
         
         messages = []
         if system_message:
@@ -95,13 +145,13 @@ class RAG:
         messages.append({"role": "user", "content": prompt})
         
         response = openai.ChatCompletion.create(
-            model=self.llm_config.get("model", "gpt-4"),
+            model=model_config.get("model", "gpt-4"),
             messages=messages,
-            temperature=self.llm_config.get("temperature", 0.1),
-            max_tokens=self.llm_config.get("max_tokens", 2000),
-            top_p=self.llm_config.get("top_p", 1),
-            frequency_penalty=self.llm_config.get("frequency_penalty", 0),
-            presence_penalty=self.llm_config.get("presence_penalty", 0)
+            temperature=model_config.get("temperature", 0.1),
+            max_tokens=model_config.get("max_tokens", 2000),
+            top_p=model_config.get("top_p", 1),
+            frequency_penalty=model_config.get("frequency_penalty", 0),
+            presence_penalty=model_config.get("presence_penalty", 0)
         )
         
         return response

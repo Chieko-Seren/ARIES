@@ -263,13 +263,76 @@ def create_default_llm_config(config_path: str):
         return
         
     default_config = {
-        "provider": "openai",
-        "model": "gpt-4",
+        # 基础配置
+        "api_key": "",  # OpenAI API密钥
+        
+        # RWKV配置
+        "rwkv_model_path": "",  # RWKV模型路径
+        "context_length": 2048,  # 上下文窗口大小
+        "batch_size": 512,  # 批处理大小
+        "threads": 4,  # CPU线程数
+        "gpu_layers": 0,  # 使用GPU的层数
+        
+        # 通用生成参数
         "temperature": 0.1,
         "max_tokens": 2000,
         "top_p": 1,
         "frequency_penalty": 0,
-        "presence_penalty": 0
+        "presence_penalty": 0,
+        
+        # 任务分类阈值
+        "long_text_threshold": 1000,  # 长文本阈值（字符数）
+        
+        # 模型特定配置
+        "models": {
+            "gpt4": {
+                "model": "gpt-4",
+                "max_tokens": 2000,
+                "temperature": 0.1
+            },
+            "gpt4-mini": {
+                "model": "gpt-4-mini",
+                "max_tokens": 1000,
+                "temperature": 0.1
+            },
+            "rwkv": {
+                "model_path": "",  # 将在运行时设置
+                "context_length": 2048,
+                "batch_size": 512,
+                "threads": 4,
+                "gpu_layers": 0
+            }
+        },
+        
+        # 分类器配置
+        "classifier": {
+            # 文本向量化配置
+            "vectorizer": {
+                "model_path": "",  # RWKV-7模型路径
+                "context_length": 2048,
+                "batch_size": 512,
+                "threads": 4,
+                "gpu_layers": 0
+            },
+            
+            # 贝叶斯分类器配置
+            "bayes": {
+                "min_samples": 5,  # 每个类别最小样本数
+                "confidence_threshold": 0.7,  # 分类置信度阈值
+                "update_threshold": 0.8  # 更新训练数据阈值
+            },
+            
+            # 任务分类阈值
+            "thresholds": {
+                "long_text": 1000,  # 长文本阈值（字符数）
+                "high_reasoning_keywords": [
+                    "分析", "推理", "解释", "为什么", "如何", "原因", "影响",
+                    "比较", "评估", "预测", "建议", "策略", "方案", "决策",
+                    "analyze", "reason", "explain", "why", "how", "cause",
+                    "compare", "evaluate", "predict", "suggest", "strategy"
+                ]
+            }
+        }
     }
     
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
