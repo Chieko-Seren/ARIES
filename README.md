@@ -6,9 +6,9 @@
   <h1> ARIES </h1>
 
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
-[![AI-Powered](https://img.shields.io/badge/AI--Powered-🧠-FF69B4?style=for-the-badge)](https://github.com/yourusername/openkimi#智能-agentaries-的智慧核心)
-[![IoT Ready](https://img.shields.io/badge/IoT%20Ready-🌐-6A5ACD?style=for-the-badge)](https://github.com/yourusername/openkimi#物联网的神经mqtt-智能设备管理)
-[![Star Us!](https://img.shields.io/badge/Star%20Us!-⭐-F7DF1E?style=for-the-badge&logo=github&logoColor=white)](https://github.com/)
+[![AI-Powered](https://img.shields.io/badge/AI--Powered-🧠-FF69B4?style=for-the-badge)](https://github.com/Chieko-Seren/ARIES/)
+[![IoT Ready](https://img.shields.io/badge/IoT%20Ready-🌐-6A5ACD?style=for-the-badge)](https://github.com/Chieko-Seren/ARIES/)
+[![Star Us!](https://img.shields.io/badge/Star%20Us!-⭐-F7DF1E?style=for-the-badge&logo=github&logoColor=white)](https://github.com/Chieko-Seren/ARIES/)
 
 </div>
 
