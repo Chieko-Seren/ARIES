@@ -1,7 +1,44 @@
-# ARIES - AI Native 自动运维系统
+<div align="center">
+
+
+  <img src="ARIES.png">
+
+  <h1> ARIES </h1>
+
+[![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![AI-Powered](https://img.shields.io/badge/AI--Powered-🧠-FF69B4?style=for-the-badge)](https://github.com/yourusername/openkimi#智能-agentaries-的智慧核心)
+[![IoT Ready](https://img.shields.io/badge/IoT%20Ready-🌐-6A5ACD?style=for-the-badge)](https://github.com/yourusername/openkimi#物联网的神经mqtt-智能设备管理)
+[![Star Us!](https://img.shields.io/badge/Star%20Us!-⭐-F7DF1E?style=for-the-badge&logo=github&logoColor=white)](https://github.com/)
+
+</div>
+
 
 > [!TIP]
 > 🥰 现在您可以访问 docs 以获得基于 Vite 的 ARIES 文档。
+
+---
+
+## 目录
+
+-   [ARIES 简介](#aries-简介)
+-   [系统特点](#系统特点)
+-   [系统架构](#系统架构)
+    -   [后端](#后端)
+    -   [前端](#前端)
+    -   [环境要求](#环境要求)
+    -   [安装步骤](#安装步骤)
+    -   [配置](#配置)
+-   [联系](#联系)
+    -   [枣庄市第二十八中学](#枣庄市第二十八中学)
+    -   [滕州市第一中学](#滕州市第一中学)
+-   [使用方法](#使用方法)
+    -   [启动服务](#启动服务)
+    -   [API使用](#api使用)
+-   [许可证](#许可证)
+
+---
+
+## ARIES 简介
 
 - 💫 2025年5月15日：我们引入了 ARIES 的 Web Lite 版本，现在 ARIES 的精简版可在您的浏览器运行！
 - ✅ 2025年6月8日：我们引入了 SQLite 和机器学习方法，并提交了该项目的子项目 OpenNIPS（开源网络安全防护系统）。
