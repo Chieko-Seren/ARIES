@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARIES Web Lite - 登录</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@400;500;600&display=swap">
+    <style>
+        body {
+            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .apple-input {
+            @apply w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200;
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .apple-button {
+            @apply w-full px-6 py-3 rounded-lg text-white font-medium transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98];
+            background: linear-gradient(to right, #007AFF, #5856D6);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div class="w-full max-w-md">
+        <div class="glass-card rounded-2xl p-8 shadow-xl">
+            <div class="text-center mb-8">
+                <h1 class="text-3xl font-semibold text-gray-800 mb-2">ARIES Web Lite</h1>
+                <p class="text-gray-600">请输入密码以继续</p>
+            </div>
+
+            {% if error %}
+            <div class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p class="text-red-600 text-sm">{{ error }}</p>
+            </div>
+            {% endif %}
+
+            <form method="POST" action="/login" class="space-y-4">
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        required 
+                        class="apple-input"
+                        placeholder="请输入密码"
+                        autocomplete="current-password"
+                    >
+                </div>
+
+                <button type="submit" class="apple-button">
+                    登录
+                </button>
+            </form>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-500">
+                    ARIES Web Lite 版本
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 添加输入框焦点效果
+        document.querySelectorAll('.apple-input').forEach(input => {
+            input.addEventListener('focus', () => {
+                input.parentElement.classList.add('ring-2', 'ring-blue-500', 'ring-opacity-50');
+            });
+            input.addEventListener('blur', () => {
+                input.parentElement.classList.remove('ring-2', 'ring-blue-500', 'ring-opacity-50');
+            });
+        });
+    </script>
+</body>
+</html> 
